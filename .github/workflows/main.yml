@@ -28,7 +28,7 @@ jobs:
 
       - name: 更新 Feeds (必须，否则 menuconfig 没内容)
         run: |
-          cd openwrt/immortalwrt
+          cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           make defconfig

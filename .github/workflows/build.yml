@@ -1,0 +1,85 @@
+name: Build ImmortalWrt for Redmi AC2100
+
+on:
+  workflow_dispatch: # 允许在 GitHub Actions 页面手动触发编译
+
+jobs:
+  build:
+    name: Build Firmware
+    runs-on: ubuntu-22.04 # 推荐使用 22.04，对编译环境支持最稳定
+
+    steps:
+    - name: 检出当前仓库代码 (获取你的 .config 文件)
+      uses: actions/checkout@v4
+
+    - name: 释放磁盘空间 (Ubuntu)
+      # GitHub Actions 默认磁盘空间可能不足，清理无用环境释放约 20GB 空间
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        sudo apt-get clean
+
+    - name: 初始化编译环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo apt update -y
+		sudo apt full-upgrade -y
+		sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+			  bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
+			  g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev \
+			  libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
+			  libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
+			  ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
+			  python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
+			  upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
+
+    - name: 克隆 ImmortalWrt 源码
+      # 这里使用了你指定的 git clone 命令
+      run: |
+        git clone -b openwrt-24.10 --single-branch --filter=blob:none https://github.com/immortalwrt/immortalwrt immortalwrt
+
+    - name: 更新并安装 Feeds
+      working-directory: ./immortalwrt
+      run: |
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: 导入自定义 .config 配置文件
+      run: |
+        # 将仓库根目录的 .config 移动到源码目录
+        [ -e .config ] && mv .config immortalwrt/.config
+        cd immortalwrt
+        make defconfig
+
+    - name: 下载依赖包 (Download Packages)
+      working-directory: ./immortalwrt
+      run: |
+        make download -j8
+        # 删除下载失败的残缺文件
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: 编译固件 (Compile Firmware)
+      working-directory: ./immortalwrt
+      run: |
+        echo -e "$(nproc) thread compile"
+        # 优先多线程编译，如果失败则回退到单线程并输出详细日志排错
+        make -j$(nproc) || make -j1 || make -j1 V=s
+
+    - name: 提取编译好的固件并整理
+      id: organize
+      run: |
+        cd immortalwrt/bin/targets/*/*
+        # 删除不必要的包文件夹，只保留固件文件
+        rm -rf packages
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+
+    - name: 上传固件到 GitHub Actions
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmortalWrt_Redmi_AC2100_Firmware
+        path: ${{ env.FIRMWARE }}

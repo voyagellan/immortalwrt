@@ -1,4 +1,4 @@
-name: Config
+name: Config1
 on: [workflow_dispatch]
 
 jobs:
@@ -24,11 +24,11 @@ jobs:
 
 
       - name: 克隆源码
-        run: git clone -b openwrt-24.10 --single-branch --filter=blob:none https://github.com/immortalwrt/immortalwrt openwrt
+        run: git clone -b openwrt-24.10 --single-branch --filter=blob:none https://github.com/immortalwrt/immortalwrt
 
       - name: 更新 Feeds (必须，否则 menuconfig 没内容)
         run: |
-          cd openwrt
+          cd immortalwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           make defconfig
